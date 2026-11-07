@@ -186,9 +186,9 @@ AI_HELP_MODEL=gpt-4o-mini
 | **Transformer 内部机制** | 12   | 激活函数 → 归一化 → 注意力 → GPT-2 Block     |
 | **注意力与位置编码**     | 13   | 所有注意力变体 + RoPE、ALiBi、NTK-RoPE          |
 | **从零训练 GPT**         | 15   | Embedding → 架构 → 损失 → 优化器 → 训练技巧 |
-| **推理与分布式**         | 9    | KV Cache、量化、采样、张量并行、FSDP            |
-| **对齐与推理搜索**       | 6    | 奖励模型 → DPO → GRPO → PPO → MCTS          |
-| **ViT 全流程**           | 7    | 卷积 → Patch Embedding → ViT Block            |
+| **推理与分布式训练**     | 9    | KV Cache、量化、采样、张量并行、FSDP            |
+| **对齐与 Agent 推理**    | 6    | 奖励模型 → DPO → GRPO → PPO → MCTS          |
+| **Vision Transformer 流水线** | 7 | 卷积 → Patch Embedding → ViT Block            |
 | **扩散模型与 DiT**       | 5    | 噪声调度 → DDIM → 流匹配 → adaLN-Zero        |
 | **LLM 前沿架构**         | 7    | GQA、差分注意力、MLA、MoE、多 Token 预测        |
 | **图神经网络**           | 8    | GCN → GAT → GIN → MPNN → GraphSAGE → 链接预测 → GAE |
@@ -199,14 +199,14 @@ AI_HELP_MODEL=gpt-4o-mini
 基础 ──→ Transformer 内部机制 ──→ 从零训练 GPT
                  │                        │
                  ▼                        ▼
-        注意力与位置编码            推理与分布式
+        注意力与位置编码            推理与分布式训练
                  │                        │
                  ▼                        ▼
-        LLM 前沿架构             对齐与推理搜索
+        LLM 前沿架构             对齐与 Agent 推理
                  │
           ┌──────┼──────┐
           ▼      ▼      ▼
-     ViT 全流程  扩散   图神经网络
+     Vision Transformer 流水线  扩散   图神经网络
 ```
 
 ---
