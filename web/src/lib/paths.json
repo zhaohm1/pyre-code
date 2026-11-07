@@ -81,6 +81,16 @@
       "prerequisites": []
     },
     {
+      "id": "paraformer-core",
+      "titleEn": "Paraformer Core Mechanisms",
+      "titleZh": "Paraformer 核心机制",
+      "descriptionEn": "Trace frame weights through CIF alignment, then predict every token in parallel with self- and cross-attention.",
+      "descriptionZh": "从帧权重和 CIF 对齐出发，通过自注意力与交叉注意力并行预测全部 token。",
+      "icon": "AudioLines",
+      "problems": ["attention", "mha", "cross_attention", "cif_weights", "cif_integrate", "paraformer_parallel"],
+      "prerequisites": ["transformer-internals"]
+    },
+    {
       "id": "graph-neural-networks",
       "titleEn": "Graph Neural Networks",
       "titleZh": "图神经网络",

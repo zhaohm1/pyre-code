@@ -2427,6 +2427,89 @@
           "code": "\nimport torch\nN, F = 6, 4\nA = torch.zeros(N, N)\nedges_list = [(0,1),(1,2),(2,3),(3,4),(4,5),(0,5)]\nfor i,j in edges_list:\n    A[i,j] = A[j,i] = 1.0\ntorch.manual_seed(42)\nX = torch.randn(N, F)\n# (i,j) and (j,i) should produce the same score since decoder is dot product\nedges_fwd = torch.tensor([[0,1],[2,3],[1,4]], dtype=torch.long)\nedges_rev = torch.tensor([[1,0],[3,2],[4,1]], dtype=torch.long)\nscores_fwd = {fn}(A, X, edges_fwd)\nscores_rev = {fn}(A, X, edges_rev)\nassert torch.allclose(scores_fwd, scores_rev, atol=1e-5), f'score(i,j) should equal score(j,i): max diff = {(scores_fwd - scores_rev).abs().max().item():.6f}'\n"
         }
       ]
+    },
+    {
+      "id": "cif_weights",
+      "title": "CIF Weights and Length",
+      "titleZh": "CIF 权重与长度",
+      "difficulty": "Easy",
+      "functionName": "cif_weights",
+      "hint": "Mask first, sum per row, then scale each nonzero row by target_lengths/raw_lengths. Reject a positive target for a zero-sum row.",
+      "hintZh": "先遮蔽再逐行求和；非零行乘以 target_lengths/raw_lengths。零权重行若目标长度为正则报错。",
+      "descriptionEn": "Prepare frame weights for a CIF predictor. `alpha` has shape (B,T), `valid` is a boolean mask of the same shape, and `target_lengths` has shape (B,). Return `(raw_lengths, scaled_alpha)`: the sum of valid original weights (B,), and weights normalized so each row sums to its target length. Invalid frames remain zero. If a row has zero valid weight, its target must be zero and its scaled weights remain zero. Do not round the raw lengths. Preserve gradients through nonzero weights.",
+      "descriptionZh": "为 CIF 预测器准备帧权重。`alpha` 形状为 (B,T)，`valid` 是同形状的布尔有效帧掩码，`target_lengths` 形状为 (B,)。返回 `(raw_lengths, scaled_alpha)`：有效原始权重之和 (B,)，以及每行权重和等于目标 token 数的归一化权重。无效帧始终为零。若某行有效权重和为零，则其目标长度必须为零，该行归一化权重保持零。原始长度不取整；非零权重的计算须保留梯度。",
+      "tests": [
+        {
+          "name": "Mask and independent sums",
+          "code": "\nimport torch\na = torch.tensor([[0.2,0.3,9.0],[0.4,0.6,8.0]])\nm = torch.tensor([[True,True,False],[True,True,False]])\nraw, scaled = {fn}(a,m,torch.tensor([1,2]))\nassert torch.allclose(raw,torch.tensor([0.5,1.0]))\nassert torch.allclose(scaled,torch.tensor([[0.4,0.6,0.0],[0.8,1.2,0.0]]))\n"
+        },
+        {
+          "name": "Zero row and invalid frame invariance",
+          "code": "\nimport torch\na = torch.tensor([[0.,0.,100.],[0.2,0.8,500.]])\nm = torch.tensor([[True,True,False],[True,True,False]])\nr,s = {fn}(a,m,torch.tensor([0,1]))\nassert torch.allclose(r,torch.tensor([0.,1.])) and torch.allclose(s.sum(1),torch.tensor([0.,1.]))\na[:,2] = -900\nr2,s2 = {fn}(a,m,torch.tensor([0,1]))\nassert torch.allclose(r,r2) and torch.allclose(s,s2)\n"
+        },
+        {
+          "name": "Impossible positive target",
+          "code": "\nimport torch\ntry:\n    {fn}(torch.zeros(1,2),torch.ones(1,2,dtype=torch.bool),torch.tensor([1]))\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError('Expected ValueError for zero weight and positive target')\n"
+        },
+        {
+          "name": "Gradient through normalization",
+          "code": "\nimport torch\na = torch.tensor([[0.2,0.8]],requires_grad=True)\nr,s = {fn}(a,torch.ones(1,2,dtype=torch.bool),torch.tensor([1]))\n(s[0,0]+r[0]).backward()\nassert a.grad is not None and torch.isfinite(a.grad).all()\n"
+        }
+      ]
+    },
+    {
+      "id": "cif_integrate",
+      "title": "CIF Integrate and Fire",
+      "titleZh": "CIF 积分与触发",
+      "difficulty": "Medium",
+      "functionName": "cif_integrate",
+      "hint": "For each frame, repeatedly consume min(remaining frame weight, 1-current mass). Fire at mass 1, then reset the accumulator. Pad emitted lists only after all batch rows finish.",
+      "hintZh": "逐帧反复消耗 min(当前帧剩余权重, 1-当前累积量)；满 1 后输出并清空累积器。所有样本完成后再对输出补零。",
+      "descriptionEn": "Implement threshold-1 CIF over `frames` (B,T,D) and nonnegative `alpha` (B,T). Consume frames in order. Each full unit of accumulated weight fires one token embedding, the weighted sum of frame vectors contributing to that unit. Split a frame's weight across a boundary; one frame may fire several tokens. Return `(tokens, lengths, tail, tail_weight)` where tokens is zero-padded to (B,max(lengths),D), lengths is (B,) integer, and the unfinished weighted sum and weight are (B,D) and (B,). An exact threshold produces an empty tail. No tail token is emitted. Preserve gradients through token values.",
+      "descriptionZh": "对 `frames` (B,T,D) 和非负 `alpha` (B,T) 实现阈值为 1 的 CIF。按帧顺序累积权重；每满 1 即触发一个 token 表示，其值为当前单位内帧向量的加权和。跨越阈值的帧须拆分权重；单帧也可能触发多个 token。返回 `(tokens, lengths, tail, tail_weight)`：tokens 补零至 (B,max(lengths),D)，lengths 为 (B,) 整数，未完成部分的加权和与权重分别为 (B,D)、(B,)。恰好触发时尾部为空；不额外输出尾部 token。token 值须保留梯度。",
+      "tests": [
+        {
+          "name": "Exact boundary and split frame",
+          "code": "\nimport torch\nx=torch.tensor([[[2.],[4.],[8.]]])\na=torch.tensor([[0.5,1.0,0.5]])\ny,n,t,w={fn}(x,a)\nassert n.tolist()==[2] and y.shape==(1,2,1)\nassert torch.allclose(y[0,:,0],torch.tensor([3.,6.]))\nassert torch.allclose(t,torch.zeros_like(t)) and torch.allclose(w,torch.zeros_like(w))\n"
+        },
+        {
+          "name": "One frame crosses multiple boundaries",
+          "code": "\nimport torch\ny,n,t,w={fn}(torch.tensor([[[3.]]]),torch.tensor([[2.25]]))\nassert n.tolist()==[2] and torch.allclose(y[0,:,0],torch.tensor([3.,3.]))\nassert torch.allclose(t,torch.tensor([[0.75]])) and torch.allclose(w,torch.tensor([0.25]))\n"
+        },
+        {
+          "name": "Batch padding and unfinished tail",
+          "code": "\nimport torch\nx=torch.tensor([[[2.],[4.]],[[5.],[9.]]])\na=torch.tensor([[0.5,0.75],[0.2,0.3]])\ny,n,t,w={fn}(x,a)\nassert n.tolist()==[1,0] and y.shape==(2,1,1)\nassert torch.allclose(y[:,0,0],torch.tensor([3.,0.]))\nassert torch.allclose(t[:,0],torch.tensor([1.,3.7]))\nassert torch.allclose(w,torch.tensor([0.25,0.5]))\n"
+        },
+        {
+          "name": "Gradient through fired embedding",
+          "code": "\nimport torch\nx=torch.tensor([[[2.],[4.]]],requires_grad=True)\ny,n,t,w={fn}(x,torch.tensor([[0.5,0.5]]))\ny.sum().backward()\nassert torch.allclose(x.grad[:,:,0],torch.tensor([[0.5,0.5]]))\n"
+        }
+      ]
+    },
+    {
+      "id": "paraformer_parallel",
+      "title": "Paraformer Parallel Token Prediction",
+      "titleZh": "Paraformer 并行 token 预测",
+      "difficulty": "Medium",
+      "functionName": "paraformer_parallel",
+      "hint": "Self: softmax((tokens@sq) @ (tokens@sk).transpose(-1,-2) / sqrt(D)) @ (tokens@sv). Cross: use self output for Q, encoder for K/V. Then project with out.",
+      "hintZh": "自注意力使用 tokens 生成 Q/K/V；交叉注意力用自注意力结果生成 Q、encoder 生成 K/V；最后乘 out。",
+      "descriptionEn": "Given all CIF token states `tokens` (B,U,D) and encoder states `encoder` (B,T,D), compute single-head noncausal token self-attention, then encoder cross-attention, then vocabulary logits (B,U,V). Signature: `paraformer_parallel(tokens, encoder, sq, sk, sv, cq, ck, cv, out)`. The first six weights have shape (D,D), `out` has shape (D,V). Self-attention uses `tokens` for Q/K/V; cross-attention uses the self-attention output for Q and `encoder` for K/V. Each attention score is divided by sqrt(D). Return all token logits in one call, without causal masking, recurrence, bias, residual, or final softmax. This is a focused exercise, not a complete Paraformer decoder.",
+      "descriptionZh": "给定全部 CIF token 表示 `tokens` (B,U,D) 和编码器表示 `encoder` (B,T,D)，先计算单头、无因果遮蔽的 token 自注意力，再计算编码器交叉注意力，最后输出词表 logits (B,U,V)。签名：`paraformer_parallel(tokens, encoder, sq, sk, sv, cq, ck, cv, out)`。前六个权重形状为 (D,D)，`out` 为 (D,V)。自注意力以 `tokens` 生成 Q/K/V；交叉注意力以自注意力结果生成 Q，以 `encoder` 生成 K/V。每次注意力分数除以 sqrt(D)。一次返回所有 token 位置的 logits；不使用因果遮蔽、递归、偏置、残差或最终 softmax。这是聚焦练习，并非完整 Paraformer 解码器。",
+      "tests": [
+        {
+          "name": "Shape and independent numerical reference",
+          "code": "\nimport torch, math\ntorch.manual_seed(7)\nB,U,T,D,V=2,3,4,5,7\nx=torch.randn(B,U,D); e=torch.randn(B,T,D)\nw=[torch.randn(D,D) for _ in range(6)]+[torch.randn(D,V)]\ny={fn}(x,e,*w)\nq,k,v=(x@w[i] for i in range(3))\nh=torch.bmm(torch.softmax(torch.bmm(q,k.transpose(1,2))/math.sqrt(D),dim=-1),v)\nq=h@w[3]; k=e@w[4]; v=e@w[5]\nexpected=torch.bmm(torch.softmax(torch.bmm(q,k.transpose(1,2))/math.sqrt(D),dim=-1),v)@w[6]\nassert y.shape==(B,U,V) and torch.allclose(y,expected,atol=1e-5)\n"
+        },
+        {
+          "name": "Later token affects earlier output",
+          "code": "\nimport torch\nI=torch.eye(2); x=torch.tensor([[[1.,0.],[0.,1.]]]); e=torch.tensor([[[1.,2.],[3.,4.]]])\ny1={fn}(x,e,I,I,I,I,I,I,I)\nx2=x.clone(); x2[:,1]=torch.tensor([3.,2.])\ny2={fn}(x2,e,I,I,I,I,I,I,I)\nassert not torch.allclose(y1[:,0],y2[:,0])\n"
+        },
+        {
+          "name": "Gradients for inputs and weights",
+          "code": "\nimport torch\nx=torch.randn(1,3,4,requires_grad=True); e=torch.randn(1,5,4,requires_grad=True)\nw=[torch.randn(4,4,requires_grad=True) for _ in range(6)]+[torch.randn(4,6,requires_grad=True)]\n{fn}(x,e,*w).square().sum().backward()\nassert x.grad is not None and e.grad is not None and all(z.grad is not None for z in w)\n"
+        }
+      ]
     }
   ]
 }

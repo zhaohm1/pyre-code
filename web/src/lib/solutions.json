@@ -13,6 +13,20 @@
       }
     ]
   },
+  "cif_weights": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def cif_weights(alpha, valid, target_lengths):\n    masked = alpha * valid.to(alpha.dtype)\n    raw = masked.sum(dim=1)\n    targets = target_lengths.to(alpha.dtype)\n    if torch.any((raw == 0) & (targets > 0)):\n        raise ValueError(\"positive target length with zero valid weight\")\n    scale = torch.where(raw > 0, targets / raw.clamp_min(1e-12), torch.zeros_like(raw))\n    return raw, masked * scale[:, None]",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "alpha = torch.tensor([[0.2, 0.3, 0.0]])\nvalid = torch.tensor([[True, True, False]])\nprint(cif_weights(alpha, valid, torch.tensor([1])))",
+        "role": "demo"
+      }
+    ]
+  },
   "cross_entropy": {
     "cells": [
       {
@@ -339,6 +353,20 @@
       }
     ]
   },
+  "cif_integrate": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def cif_integrate(frames, alpha):\n    if torch.any(alpha < 0):\n        raise ValueError(\"alpha must be nonnegative\")\n    B, T, D = frames.shape\n    rows, tails, masses, lengths = [], [], [], []\n    for b in range(B):\n        emitted = []\n        acc = frames.new_zeros(D)\n        mass = 0.0\n        for i in range(T):\n            remaining = float(alpha[b, i].item())\n            while remaining > 1e-7:\n                take = min(remaining, 1.0 - mass)\n                acc = acc + frames[b, i] * take\n                mass += take\n                remaining -= take\n                if mass >= 1.0 - 1e-7:\n                    emitted.append(acc)\n                    acc = frames.new_zeros(D)\n                    mass = 0.0\n        rows.append(emitted)\n        tails.append(acc)\n        masses.append(mass)\n        lengths.append(len(emitted))\n    max_len = max(lengths, default=0)\n    padded = [torch.stack(row + [frames.new_zeros(D)] * (max_len - len(row))) for row in rows] if max_len else []\n    tokens = torch.stack(padded) if padded else frames.new_zeros(B, 0, D)\n    return tokens, torch.tensor(lengths, device=frames.device), torch.stack(tails), alpha.new_tensor(masses)",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x = torch.tensor([[[2.], [4.], [8.]]])\nprint(cif_integrate(x, torch.tensor([[0.5, 1.0, 0.5]])))",
+        "role": "demo"
+      }
+    ]
+  },
   "contrastive_loss": {
     "cells": [
       {
@@ -586,6 +614,20 @@
       {
         "type": "code",
         "source": "torch.manual_seed(0)\nB, S, D, V = 2, 5, 16, 10\n\nhidden = torch.randn(B, S, D)\nhead_single = torch.randn(D, V)\ntargets_single = torch.randint(0, V, (B, S, 1))\n\nmtp_loss = multi_token_prediction_loss(hidden, [head_single], targets_single)\n\nlogits = hidden @ head_single\nce_loss = torch.nn.functional.cross_entropy(logits.reshape(-1, V), targets_single[:, :, 0].reshape(-1))\n\nprint(f\"MTP loss (N=1):  {mtp_loss.item():.6f}\")\nprint(f\"Standard CE:     {ce_loss.item():.6f}\")\nprint(f\"N=1 matches CE:  {torch.allclose(mtp_loss, ce_loss, atol=1e-5)}\")\n\nheads_3 = [torch.randn(D, V) for _ in range(3)]\ntargets_3 = torch.randint(0, V, (B, S, 3))\nloss_3 = multi_token_prediction_loss(hidden, heads_3, targets_3)\nprint(f\"MTP loss (N=3):  {loss_3.item():.6f}\")",
+        "role": "demo"
+      }
+    ]
+  },
+  "paraformer_parallel": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def paraformer_parallel(tokens, encoder, sq, sk, sv, cq, ck, cv, out):\n    d = tokens.shape[-1]\n    self_scores = (tokens @ sq) @ (tokens @ sk).transpose(-1, -2) / (d ** 0.5)\n    hidden = torch.softmax(self_scores, dim=-1) @ (tokens @ sv)\n    cross_scores = (hidden @ cq) @ (encoder @ ck).transpose(-1, -2) / (d ** 0.5)\n    context = torch.softmax(cross_scores, dim=-1) @ (encoder @ cv)\n    return context @ out",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x = torch.randn(2, 4, 8)\ne = torch.randn(2, 12, 8)\nw = [torch.randn(8, 8) for _ in range(6)] + [torch.randn(8, 20)]\nprint(paraformer_parallel(x, e, *w).shape)",
         "role": "demo"
       }
     ]
