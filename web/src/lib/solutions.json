@@ -1,4 +1,60 @@
 {
+  "asr_ctc_collapse": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_ctc_collapse(path, blank=0):\n    out = []\n    previous = None\n    for token in path:\n        if token != previous and token != blank:\n            out.append(token)\n        previous = token\n    return tuple(out)",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "print(asr_ctc_collapse([1,1,0,1,2,2]))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_ctc_greedy": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_ctc_greedy(logits, lengths, blank=0):\n    results = []\n    for row, length in zip(logits, lengths):\n        previous = None\n        tokens = []\n        for token in row[:int(length)].argmax(-1).tolist():\n            if token != previous and token != blank:\n                tokens.append(token)\n            previous = token\n        results.append(tuple(tokens))\n    return results",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(2,5,4); print(asr_ctc_greedy(x,torch.tensor([5,3])))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_frame_logits": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_frame_logits(states, lengths, weight, bias):\n    import torch\n    logits = states @ weight + bias\n    valid = torch.arange(states.shape[1], device=states.device)[None, :] < lengths[:, None]\n    return logits * valid.unsqueeze(-1).to(logits.dtype)",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "s=torch.randn(2,4,8); print(asr_frame_logits(s,torch.tensor([4,2]),torch.randn(8,6),torch.zeros(6)).shape)",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_frame_mask": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_frame_mask(features, lengths):\n    import torch\n    mask = torch.arange(features.shape[1], device=features.device)[None, :] < lengths[:, None]\n    return mask, features * mask.unsqueeze(-1).to(features.dtype)",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(2,5,80); mask,valid=asr_frame_mask(x,torch.tensor([5,3])); print(mask,valid.shape)",
+        "role": "demo"
+      }
+    ]
+  },
   "attention": {
     "cells": [
       {
@@ -255,6 +311,34 @@
       }
     ]
   },
+  "zipformer_bypass": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def zipformer_bypass(x, y, c):\n    return (1 - c) * x + c * y",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.zeros(1,2,3); y=torch.ones_like(x)\nprint(zipformer_bypass(x,y,torch.tensor([0.,0.5,1.])))",
+        "role": "demo"
+      }
+    ]
+  },
+  "zipformer_resample": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def zipformer_resample(x, factor):\n    import torch.nn.functional as F\n    t = x.shape[1]\n    groups = (t + factor - 1) // factor\n    padded = F.pad(x, (0, 0, 0, groups * factor - t))\n    sums = padded.reshape(x.shape[0], groups, factor, x.shape[2]).sum(2)\n    counts = torch.arange(groups, device=x.device) * factor\n    counts = (t - counts).clamp(min=1, max=factor).to(x.dtype)\n    low = sums / counts[None, :, None]\n    return low, low.repeat_interleave(factor, dim=1)[:, :t]",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.arange(15.).reshape(1,5,3)\nprint([z.shape for z in zipformer_resample(x,2)])",
+        "role": "demo"
+      }
+    ]
+  },
   "activation_checkpointing": {
     "cells": [
       {
@@ -311,6 +395,62 @@
       }
     ]
   },
+  "asr_attention_rescore": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_attention_rescore(candidates, attention_score, ctc_weight):\n    if not candidates:\n        raise ValueError('at least one CTC candidate is required')\n    ranked = [(tuple(tokens), ctc_weight * float(ctc) + (1 - ctc_weight) * float(attention_score(tuple(tokens)))) for tokens, ctc in candidates]\n    ranked.sort(key=lambda item: (-item[1], item[0]))\n    return ranked[0][0], ranked",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "print(asr_attention_rescore([((1,),-1.),((2,),-2.)],lambda p:1. if p==(2,) else 0.,0.3))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_cer": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_cer(reference, hypothesis):\n    import unicodedata\n    def normalize(text):\n        text = unicodedata.normalize('NFKC', text).casefold()\n        return ''.join(c for c in text if not c.isspace() and not unicodedata.category(c).startswith('P'))\n    ref, hyp = normalize(reference), normalize(hypothesis)\n    previous = list(range(len(hyp) + 1))\n    for i, char in enumerate(ref, 1):\n        current = [i]\n        for j, other in enumerate(hyp, 1):\n            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (char != other)))\n        previous = current\n    distance = previous[-1]\n    return distance, distance / max(1, len(ref))",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "print(asr_cer('你好世界','你好世间'))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_rnnt_greedy": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_rnnt_greedy(score, input_length, max_output_tokens, blank=0):\n    t = 0\n    tokens = []\n    while t < input_length:\n        token = int(score(t, tuple(tokens)).argmax())\n        if token == blank:\n            t += 1\n        else:\n            tokens.append(token)\n            if len(tokens) >= max_output_tokens:\n                return tuple(tokens), True\n    return tuple(tokens), False",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "print(asr_rnnt_greedy(lambda t,p:torch.tensor([1.,0.]),3,5))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_rnnt_joiner": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_rnnt_joiner(encoder, predictor, w_e, w_p, bias, w_out):\n    hidden = torch.tanh((encoder @ w_e)[:, :, None, :] + (predictor @ w_p)[:, None, :, :] + bias)\n    return hidden @ w_out",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "e=torch.randn(2,4,3); p=torch.randn(2,5,3)\nprint(asr_rnnt_joiner(e,p,torch.eye(3),torch.eye(3),torch.zeros(3),torch.randn(3,6)).shape)",
+        "role": "demo"
+      }
+    ]
+  },
   "batchnorm": {
     "cells": [
       {
@@ -363,6 +503,48 @@
       {
         "type": "code",
         "source": "x = torch.tensor([[[2.], [4.], [8.]]])\nprint(cif_integrate(x, torch.tensor([[0.5, 1.0, 0.5]])))",
+        "role": "demo"
+      }
+    ]
+  },
+  "conformer_block": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def conformer_block(x, ffn1, attention, conv, ffn2):\n    import torch.nn.functional as F\n    a = x + 0.5 * ffn1(x)\n    b = a + attention(a)\n    c = b + conv(b)\n    return F.layer_norm(c + 0.5 * ffn2(c), (x.shape[-1],))",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(1,3,4); zero=lambda z:torch.zeros_like(z)\nprint(conformer_block(x,zero,zero,zero,zero).shape)",
+        "role": "demo"
+      }
+    ]
+  },
+  "conformer_conv": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def conformer_conv(x, pointwise, depthwise, out_weight):\n    import torch.nn.functional as F\n    d, kernel = x.shape[-1], depthwise.shape[-1]\n    z = x @ pointwise\n    gated = z[..., :d] * torch.sigmoid(z[..., d:])\n    channels = gated.transpose(1, 2)\n    windows = F.pad(channels, (kernel // 2, kernel // 2)).unfold(-1, kernel, 1)\n    convolved = (windows * depthwise[None, :, None, :]).sum(-1)\n    return convolved.transpose(1, 2) @ out_weight",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(2,5,4)\nprint(conformer_conv(x,torch.randn(4,8),torch.randn(4,3),torch.eye(4)).shape)",
+        "role": "demo"
+      }
+    ]
+  },
+  "conformer_relative_attention": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def conformer_relative_attention(q, k, v, rel_bias):\n    import math\n    t, d = q.shape[1], q.shape[2]\n    positions = torch.arange(t, device=q.device)\n    offsets = positions[None, :] - positions[:, None] + t - 1\n    scores = q @ k.transpose(-2, -1) / math.sqrt(d)\n    return torch.softmax(scores + rel_bias[offsets], dim=-1) @ v",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "q=torch.randn(1,4,8); k=torch.randn(1,4,8); v=torch.randn(1,4,8)\nprint(conformer_relative_attention(q,k,v,torch.zeros(7)).shape)",
         "role": "demo"
       }
     ]
@@ -740,6 +922,76 @@
       {
         "type": "code",
         "source": "pe = PatchEmbedding(224, 16, 3, 768)\nx = torch.randn(1, 3, 224, 224)\nprint('Output:', pe(x).shape)\nprint('Patches:', pe.num_patches)",
+        "role": "demo"
+      }
+    ]
+  },
+  "zipformer_shared_attention": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def zipformer_shared_attention(q, k, v1, v2):\n    import math\n    weights = torch.softmax(q @ k.transpose(-2, -1) / math.sqrt(q.shape[-1]), dim=-1)\n    return weights, weights @ v1, weights @ v2",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "q=torch.randn(1,3,4); k=torch.randn(1,3,4)\nprint([z.shape for z in zipformer_shared_attention(q,k,torch.randn(1,3,2),torch.randn(1,3,5))])",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_ctc_forward": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_ctc_forward(log_probs, target, input_length, blank=0):\n    import torch\n    ext = [blank]\n    for token in target:\n        ext.extend((token, blank))\n    neg = log_probs.new_tensor(float('-inf'))\n    states = [neg for _ in ext]\n    states[0] = log_probs[0, blank]\n    if len(ext) > 1:\n        states[1] = log_probs[0, ext[1]]\n    for t in range(1, input_length):\n        next_states = []\n        for s, token in enumerate(ext):\n            incoming = [states[s]]\n            if s > 0:\n                incoming.append(states[s - 1])\n            if s > 1 and token != blank and token != ext[s - 2]:\n                incoming.append(states[s - 2])\n            next_states.append(torch.logsumexp(torch.stack(incoming), 0) + log_probs[t, token])\n        states = next_states\n    return torch.logsumexp(torch.stack(states[-2:] if len(states)>1 else states), 0)",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "p=torch.tensor([[.3,.7],[.6,.4]]); print(asr_ctc_forward(p.log(),[1],2))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_ctc_prefix": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_ctc_prefix(log_probs, input_length, beam_size, blank=0):\n    import math\n    beam = {(): (1.0, 0.0)}\n    vocab = log_probs.shape[-1]\n    for t in range(input_length):\n        probs = log_probs[t].exp().tolist()\n        next_beam = {}\n        def add(prefix, blank_add=0.0, nonblank_add=0.0):\n            pb, pn = next_beam.get(prefix, (0.0, 0.0))\n            next_beam[prefix] = (pb + blank_add, pn + nonblank_add)\n        for prefix, (pb, pn) in beam.items():\n            add(prefix, blank_add=(pb + pn) * probs[blank])\n            for token in range(vocab):\n                if token == blank:\n                    continue\n                if prefix and token == prefix[-1]:\n                    add(prefix, nonblank_add=pn * probs[token])\n                    add(prefix + (token,), nonblank_add=pb * probs[token])\n                else:\n                    add(prefix + (token,), nonblank_add=(pb + pn) * probs[token])\n        ranked = sorted((p for p in next_beam if sum(next_beam[p]) > 0), key=lambda p: (-(next_beam[p][0] + next_beam[p][1]), p))\n        beam = {p: next_beam[p] for p in ranked[:beam_size]}\n    return [(p, math.log(pb + pn)) for p, (pb, pn) in beam.items()]",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "p=torch.tensor([[.1,.8,.1],[.4,.5,.1]]); print(asr_ctc_prefix(p.log(),2,3))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_feature_to_text": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_feature_to_text(features, lengths, encoder, ctc_head, rnnt_score, attention_score, vocab, references, beam_size, max_output_tokens, ctc_weight):\n    import torch, math, unicodedata\n    valid = torch.arange(features.shape[1], device=features.device)[None, :] < lengths[:, None]\n    states = encoder(features * valid.unsqueeze(-1).to(features.dtype), lengths)\n    logits = ctc_head(states)\n    def text(tokens):\n        return ''.join(vocab[token] for token in tokens)\n    def cer(reference, hypothesis):\n        def norm(value):\n            value = unicodedata.normalize('NFKC', value).casefold()\n            return ''.join(c for c in value if not c.isspace() and not unicodedata.category(c).startswith('P'))\n        ref, hyp = norm(reference), norm(hypothesis)\n        previous = list(range(len(hyp) + 1))\n        for i, char in enumerate(ref, 1):\n            current = [i]\n            for j, other in enumerate(hyp, 1):\n                current.append(min(previous[j] + 1, current[-1] + 1, previous[j - 1] + (char != other)))\n            previous = current\n        return previous[-1] / max(1, len(ref))\n    results = []\n    for b, length in enumerate(lengths):\n        n = int(length)\n        hidden = states[b, :n]\n        if n == 0:\n            candidates = [((), 0.0)]\n        else:\n            beam = {(): (1.0, 0.0)}\n            frame_probs = logits[b, :n].log_softmax(-1).exp().tolist()\n            for probs in frame_probs:\n                next_beam = {}\n                def add(prefix, blank_add=0.0, nonblank_add=0.0):\n                    pb, pn = next_beam.get(prefix, (0.0, 0.0))\n                    next_beam[prefix] = (pb + blank_add, pn + nonblank_add)\n                for prefix, (pb, pn) in beam.items():\n                    add(prefix, blank_add=(pb + pn) * probs[0])\n                    for token in range(1, len(vocab)):\n                        if prefix and token == prefix[-1]:\n                            add(prefix, nonblank_add=pn * probs[token])\n                            add(prefix + (token,), nonblank_add=pb * probs[token])\n                        else:\n                            add(prefix + (token,), nonblank_add=(pb + pn) * probs[token])\n                ranked = sorted((p for p in next_beam if sum(next_beam[p]) > 0), key=lambda p: (-(next_beam[p][0] + next_beam[p][1]), p))\n                beam = {p: next_beam[p] for p in ranked[:beam_size]}\n            candidates = [(p, math.log(pb + pn)) for p, (pb, pn) in beam.items()]\n        rescored = sorted(candidates, key=lambda item: (-(ctc_weight * item[1] + (1 - ctc_weight) * float(attention_score(hidden, item[0]))), item[0]))\n        t, tokens, truncated = 0, [], False\n        while t < n:\n            token = int(rnnt_score(hidden, t, tuple(tokens)).argmax())\n            if token == 0:\n                t += 1\n            else:\n                tokens.append(token)\n                if len(tokens) >= max_output_tokens:\n                    truncated = True\n                    break\n        best_text = text(rescored[0][0])\n        results.append({'ctc': text(candidates[0][0]), 'rnnt': text(tokens), 'rescored': best_text,\n                        'cer': cer(references[b], best_text), 'rnnt_truncated': truncated})\n    return results",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(1,3,3)\nprint(asr_feature_to_text(x,torch.tensor([3]),lambda z,l:z,lambda z:z,lambda s,t,p:torch.tensor([1.,0.,0.]),lambda s,p:0.,['','你','好'],['你'],3,4,0.5))",
+        "role": "demo"
+      }
+    ]
+  },
+  "asr_rnnt_forward": {
+    "cells": [
+      {
+        "type": "code",
+        "source": "def asr_rnnt_forward(log_probs, target, input_length, blank=0):\n    import torch\n    u_max = len(target)\n    lattice = [[log_probs.new_tensor(float('-inf')) for _ in range(u_max + 1)] for _ in range(input_length + 1)]\n    lattice[0][0] = log_probs.new_tensor(0.0)\n    for t in range(input_length):\n        for u in range(u_max + 1):\n            value = lattice[t][u]\n            lattice[t + 1][u] = torch.logaddexp(lattice[t + 1][u], value + log_probs[t, u, blank])\n            if u < u_max:\n                lattice[t][u + 1] = torch.logaddexp(lattice[t][u + 1], value + log_probs[t, u, target[u]])\n    return lattice[input_length][u_max]",
+        "role": "solution"
+      },
+      {
+        "type": "code",
+        "source": "x=torch.randn(2,2,3).log_softmax(-1); print(asr_rnnt_forward(x,[1],2))",
         "role": "demo"
       }
     ]

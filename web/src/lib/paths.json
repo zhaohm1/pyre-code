@@ -91,6 +91,36 @@
       "prerequisites": ["transformer-internals"]
     },
     {
+      "id": "conformer-core",
+      "titleEn": "Conformer Core Mechanisms",
+      "titleZh": "Conformer 核心机制",
+      "descriptionEn": "Learn relative-position attention, gated temporal convolution, and the Macaron block order.",
+      "descriptionZh": "通过相对位置注意力、门控时间卷积与 Macaron 块顺序理解 Conformer。",
+      "icon": "AudioLines",
+      "problems": ["layernorm","mha","conformer_relative_attention","conformer_conv","conformer_block"],
+      "prerequisites": ["transformer-internals"]
+    },
+    {
+      "id": "zipformer-core",
+      "titleEn": "Zipformer Core Mechanisms",
+      "titleZh": "Zipformer 核心机制",
+      "descriptionEn": "Explore multi-rate time processing, shared attention weights, and channel-wise bypass.",
+      "descriptionZh": "通过多尺度时间处理、注意力权重共享和逐通道 Bypass 理解 Zipformer。",
+      "icon": "AudioLines",
+      "problems": ["mha","conformer_conv","zipformer_resample","zipformer_shared_attention","zipformer_bypass"],
+      "prerequisites": ["conformer-core"]
+    },
+    {
+      "id": "asr-feature-to-text",
+      "titleEn": "ASR Features to Text",
+      "titleZh": "ASR 声学特征到文本",
+      "descriptionEn": "Follow log-Mel feature masks and frame scores through CTC, RNN-T, attention rescoring, and CER on synthetic examples.",
+      "descriptionZh": "从 log-Mel 特征掩码与帧级分数出发，通过合成样例理解 CTC、RNN-T、注意力重打分与字错率。",
+      "icon": "AudioLines",
+      "problems": ["linear","softmax","mha","asr_frame_mask","asr_frame_logits","asr_ctc_collapse","asr_ctc_forward","asr_ctc_greedy","asr_ctc_prefix","asr_rnnt_joiner","asr_rnnt_forward","asr_rnnt_greedy","asr_attention_rescore","asr_cer","asr_feature_to_text"],
+      "prerequisites": ["transformer-internals"]
+    },
+    {
       "id": "graph-neural-networks",
       "titleEn": "Graph Neural Networks",
       "titleZh": "图神经网络",
