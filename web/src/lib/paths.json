@@ -121,6 +121,16 @@
       "prerequisites": ["transformer-internals"]
     },
     {
+      "id": "ctc-rnnt-aed-labs",
+      "titleEn": "CTC, AED & RNN-T Hands-on Labs",
+      "titleZh": "CTC、AED 与 RNN-T 动手实验",
+      "descriptionEn": "Ten small experiments: CTC alignment and prefix search, AED attention and beam search, rescoring, and RNN-T decoding with streaming state.",
+      "descriptionZh": "十个最小实验：CTC 对齐与前缀搜索、AED 注意力与束搜索、重打分，以及带流式状态的 RNN-T 解码。",
+      "icon": "AudioLines",
+      "problems": ["asr_ctc_collapse", "asr_ctc_forward", "asr_ctc_prefix", "asr_aed_minimal", "asr_aed_beam", "asr_attention_rescore", "asr_rnnt_minimal", "asr_rnnt_greedy", "asr_rnnt_beam", "asr_rnnt_streaming"],
+      "prerequisites": ["transformer-internals"]
+    },
+    {
       "id": "graph-neural-networks",
       "titleEn": "Graph Neural Networks",
       "titleZh": "图神经网络",

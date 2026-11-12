@@ -2659,8 +2659,8 @@
       "titleZh": "CTC 路径折叠",
       "difficulty": "Easy",
       "functionName": "asr_ctc_collapse",
-      "hint": "Compare each frame with the immediately preceding original frame before removing blanks.",
-      "hintZh": "删除 blank 前，先将每帧与原始路径的前一帧比较。",
+      "hint": "CTC maps a frame-level alignment to a token sequence; blank separates repeated tokens. Walk the original path in order and track the previous frame ID, including blanks. Emit a nonblank ID only when it differs from that previous ID; update the previous ID on every frame. Why must [1,0,1] keep both 1s while [1,1] keeps one? Empty input yields an empty tuple.",
+      "hintZh": "CTC 将逐帧对齐路径映射为 token 序列；blank 可以隔开重复 token。按原始路径逐帧遍历，记录上一帧 ID（包括 blank）。仅当当前 ID 非 blank 且不同于上一帧时输出，并在每一帧更新上一帧 ID。想一想为何 [1,0,1] 保留两个 1，而 [1,1] 只保留一个；空输入返回空元组。",
       "descriptionEn": "Given a sequence of integer frame IDs `path` and `blank=0`, collapse consecutive equal IDs first, then delete blanks. Return a tuple of token IDs. Thus [1,1,0,1] -> (1,1), while [1,1] -> (1,). Empty input returns (). This is the CTC path mapping only, not probability computation.",
       "descriptionZh": "给定逐帧整数 ID 序列 `path`，blank 默认为 0；先合并连续相同 ID，再删去 blank，返回 token ID 元组。因此 [1,1,0,1] -> (1,1)，[1,1] -> (1,)。空输入返回 ()。本题只实现 CTC 路径映射，不计算概率。",
       "tests": [
@@ -2743,8 +2743,8 @@
       "titleZh": "ASR 注意力重打分",
       "difficulty": "Medium",
       "functionName": "asr_attention_rescore",
-      "hint": "Score every candidate once; use the tuple as a deterministic secondary sort key.",
-      "hintZh": "每个候选评分一次；用 token 元组作确定性的第二排序键。",
+      "hint": "CTC proposes a fixed N-best set; an AED-style scorer uses each candidate as token history to evaluate it, but cannot introduce a missing candidate. For every (tokens, CTC log score), call attention_score on that token tuple once and form the weighted sum of the two log scores. Sort all resulting pairs by descending fused score and use the token tuple as the secondary key. Return the first tuple and the full ranking without changing the input list; reject an empty candidate set.",
+      "hintZh": "CTC 先给出固定的 N-best 候选；AED 式评分器按候选 token 历史评分，但无法补入候选集外的文本。对每个 `(tokens, CTC 对数分数)`，用 token 元组调用一次 attention_score，再按权重融合两个对数分数。将结果按融合分数降序排列，同分以 token 元组为第二排序键。返回首位 token 元组及完整排序，不修改输入列表；空候选集应报错。",
       "descriptionEn": "Given nonempty `candidates` as `(token_tuple, ctc_log_score)` pairs, callable `attention_score(token_tuple)` and 0<=ctc_weight<=1, compute combined score = ctc_weight*CTC + (1-ctc_weight)*attention. Return `(best_token_tuple, ranked_pairs)` where ranked_pairs contains `(token_tuple, combined_score)` sorted by descending score, then lexicographic token tuple on ties. Do not mutate candidates. This models score fusion of a CTC-first, attention-second decoder; attention scores are supplied, not learned here.",
       "descriptionZh": "给定非空 CTC 候选列表，每项为 `(token 元组, CTC 对数分数)`，可调用的 `attention_score(token 元组)` 与 0<=ctc_weight<=1，计算融合分数 = ctc_weight*CTC + (1-ctc_weight)*注意力分数。返回 `(最佳 token 元组, ranked_pairs)`；后者包含 `(token 元组, 融合分数)`，按分数降序、同分按 token 元组字典序排序。不修改原候选。本题模拟 CTC 一遍候选、注意力二遍重排；注意力分数由题目提供。",
       "tests": [
@@ -2785,8 +2785,8 @@
       "titleZh": "RNN-T 贪心解码",
       "difficulty": "Medium",
       "functionName": "asr_rnnt_greedy",
-      "hint": "Keep t and prefix separate; a nonblank output must not advance time.",
-      "hintZh": "分别维护 t 与 prefix；输出非 blank 时不能推进时间。",
+      "hint": "RNN-T decoding moves on a two-dimensional (time, emitted-token) lattice. Start at frame t=0 with an empty prefix and query score(t,prefix) at each visited state. Argmax chooses the smallest ID on ties. Blank advances t without changing the prefix; a nonblank appends to the prefix without advancing t, even if it repeats the previous token. Stop when all input frames are consumed or the token cap is reached; mark truncated only in the latter case. The cap prevents an endless series of nonblank emissions at one frame.",
+      "hintZh": "RNN-T 解码在“声学时间、已输出 token 数”的二维格点上移动。由 t=0 和空前缀开始，每到一个状态就调用 score(t,prefix)；argmax 同分选最小 ID。blank 只推进 t，非 blank 只追加前缀、不推进 t，即使与上一 token 相同也保留。处理完所有帧或达到 token 上限时停止；仅后者标记为截断。上限还可阻止在同一帧无限输出非 blank。",
       "descriptionEn": "`score(t,prefix)` returns V logits for frame t and emitted token tuple prefix. With `input_length` frames, blank=0 and positive `max_output_tokens`, repeatedly argmax (lowest ID wins ties): blank advances t; nonblank appends token without advancing t. Stop at t=input_length or immediately when max_output_tokens is reached. Return `(tokens_tuple, truncated_bool)`; truncated is True only when the token limit stops decoding. Repeated tokens remain repeated. This toy scorer stands in for encoder/predictor/joiner state.",
       "descriptionZh": "`score(t,prefix)` 根据帧 t 和已输出 token 元组 prefix 返回 V 个 logits。给定 input_length 帧、blank=0 与正整数 max_output_tokens，反复取 argmax（同分选最小 ID）：blank 推进 t，非 blank 追加 token 而不推进 t。到达末帧或 token 上限立即停止，返回 `(token 元组, 是否被上限截断)`；仅因上限停止时截断标记为 True。重复 token 保留。本题用简化评分函数代替编码器、预测网络和联合网络状态。",
       "tests": [
@@ -2827,8 +2827,8 @@
       "titleZh": "CTC 前向概率",
       "difficulty": "Hard",
       "functionName": "asr_ctc_forward",
-      "hint": "Initialize states 0 and 1 at frame 0; each later state combines stay, previous, and permitted skip with logsumexp.",
-      "hintZh": "首帧初始化状态 0、1；以后每个状态用 logsumexp 合并停留、前一步和允许的跨步。",
+      "hint": "CTC sums probabilities of every frame path that collapses to the target; a blank-interleaved target turns this into state transitions. Build [blank,y1,blank,y2,...,blank]. At frame 0 only states 0 and 1 are reachable. At each later frame, a state receives paths that stay, move from the previous state, or skip one state when its token is nonblank and differs from the token two states back; combine incoming log scores with logsumexp before adding this frame's log probability. Sum the final blank and final token states, using only input_length frames. Repeated targets cannot use the skip transition across their separating blank.",
+      "hintZh": "CTC 前向算法把所有折叠为目标文本的逐帧路径概率相加；在目标 token 间插入 blank 后，可转化为状态递推。先构造 [blank,y1,blank,y2,...,blank]；首帧只有状态 0、1 可达。后续每个状态接收停留、从前一状态进入，以及满足“当前非 blank 且不同于前两个状态 token”时的跨一步转移；先用 logsumexp 合并入边，再加本帧对数概率。仅使用 input_length 帧，并合并末尾 token 与 blank 状态。相邻重复目标不能跨过中间 blank。",
       "descriptionEn": "`log_probs` is (T,V) log probabilities, `target` is a sequence of nonblank IDs, `input_length` is 1..T, and `blank=0`. Return the scalar log probability of all CTC paths over the first input_length frames that collapse to target. Use log-domain recurrence on blank-interleaved target; a skip transition is allowed only when the destination token is nonblank and differs from the token two states earlier. Return -inf if impossible. This is one utterance, not a batched training loss.",
       "descriptionZh": "`log_probs` 是 (T,V) 对数概率，`target` 为不含 blank 的 ID 序列，`input_length` 为 1..T，blank 默认为 0。返回前 input_length 帧中所有折叠成 target 的 CTC 路径总对数概率。对插入 blank 的目标做对数域递推；仅当目的状态非 blank 且不同于前两个状态的 token 时允许跳转。无可行路径返回 -inf。本题是单条语音的概率计算，不是批量训练损失。",
       "tests": [
@@ -2852,8 +2852,8 @@
       "titleZh": "CTC 前缀束搜索",
       "difficulty": "Hard",
       "functionName": "asr_ctc_prefix",
-      "hint": "For a repeated token, a nonblank-ending path can stay on the same prefix; only a blank-ending path can extend it with the same token.",
-      "hintZh": "遇到相同 token 时，非 blank 结尾路径可留在原前缀；只有 blank 结尾路径可扩展出重复 token。",
+      "hint": "Prefix beam search merges many CTC frame paths into the same output prefix. For each prefix keep separate mass ending in blank (pb) and nonblank (pn), starting with the empty prefix at mass 1. A blank keeps the prefix and draws from pb+pn. For a nonblank different from the last token, extend from pb+pn. For the same token, pn stays on the prefix while only pb creates a repeated-token extension. Sum contributions to identical destinations, then rank by pb+pn and prune after each valid frame; ties use lexicographic prefix order.",
+      "hintZh": "前缀束搜索把多条 CTC 逐帧路径合并到相同输出前缀。每个前缀分别保存以 blank 结尾的概率质量 pb 和以非 blank 结尾的 pn；初始空前缀的总质量为 1。输出 blank 时保留前缀，来源为 pb+pn；输出不同于末尾的 token 时，从 pb+pn 扩展。若 token 与末尾相同，pn 留在原前缀，只有 pb 才生成重复 token 的新前缀。把相同目的前缀的贡献相加，每个有效帧后按 pb+pn 排序并剪枝；同分按前缀字典序。",
       "descriptionEn": "For one utterance `log_probs` (T,V), `input_length` 1..T, blank=0 and positive `beam_size`, return up to beam_size `(prefix_tuple, log_probability)` pairs, sorted by descending total path probability then lexicographic prefix. Maintain separate probabilities for prefixes ending in blank and nonblank; merge paths that collapse to the same prefix. Prune to beam_size after each frame. This small-vocabulary exercise has no language model or streaming state.",
       "descriptionZh": "给定单条语音 `log_probs` (T,V)、有效长度 input_length（1..T）、blank=0 和正整数 beam_size，返回至多 beam_size 个 `(前缀元组, 总对数概率)`，按概率降序、同分按前缀字典序排列。分别保存以 blank 和非 blank 结束的概率，合并折叠为相同前缀的路径，每帧后保留 beam_size 个前缀。本题面向小词表，无语言模型或流式状态。",
       "tests": [
@@ -2918,6 +2918,119 @@
         {
           "name": "Differentiable lattice",
           "code": "\nimport torch\nx=torch.randn(2,3,3,requires_grad=True); y={fn}(x.log_softmax(-1),[1,2],2); y.backward()\nassert x.grad is not None and torch.isfinite(x.grad).all()\n"
+        }
+      ]
+    },
+    {
+      "id": "asr_aed_beam",
+      "title": "AED Beam Search",
+      "titleZh": "AED 束搜索",
+      "difficulty": "Medium",
+      "functionName": "asr_aed_beam",
+      "hint": "AED feeds each predicted token back to the decoder. A beam stores (prefix, cumulative_log_score, finished), starting with BOS and score zero. Only unfinished beams call score; EOS marks a completed path. Rank complete and incomplete candidates together after each expansion, and strip BOS/EOS only when returning the winner.",
+      "hintZh": "AED 将预测 token 反馈给解码器。每个束保存 (历史元组, 累计对数分数, 是否结束)，从 BOS 和分数 0 开始。仅未结束的候选调用 score；EOS 标记完成路径。每步把已结束与新扩展候选一起排序，最终返回时才去掉 BOS/EOS。",
+      "descriptionEn": "Implement asr_aed_beam(score, bos, eos, max_output_tokens, beam_size). score(prefix_tuple) returns V log probabilities for the next token, where prefix includes BOS. At each step expand every unfinished hypothesis by every vocabulary token, add log probabilities, keep the best beam_size hypotheses by descending score then lexicographic token tuple. EOS completes a hypothesis and is never expanded again. Stop when all retained hypotheses complete or max_output_tokens tokens after BOS have been generated. Return (best_tokens_tuple, best_log_score, completed_bool), excluding BOS and EOS from best_tokens_tuple. Use the same ranking for final selection; positive max_output_tokens and beam_size, distinct BOS/EOS.",
+      "descriptionZh": "实现 asr_aed_beam(score, bos, eos, max_output_tokens, beam_size)。score(prefix_tuple) 根据含 BOS 的历史 token 返回下一 token 的 V 个对数概率。每步扩展所有未结束候选，累加对数概率，再按分数降序、同分按 token 元组字典序保留 beam_size 个。EOS 使候选结束，之后不再扩展。全部保留候选结束或 BOS 后已生成 max_output_tokens 个 token 时停止。返回 (最佳 token 元组, 最佳对数分数, 是否到达 EOS)，输出 token 元组不含 BOS/EOS。最终仍按相同顺序选最佳候选；两个上限均为正，BOS 与 EOS 不同。",
+      "tests": [
+        {
+          "name": "Beam recovers a better complete path",
+          "code": "\nimport torch\ndef score(p):\n if len(p)==1: return torch.tensor([-100.,-1.,-.5,-100.])\n if p[-1]==1: return torch.tensor([-100.,-100.,-100.,0.])\n return torch.tensor([-100.,-100.,-100.,-10.])\nassert {fn}(score,0,3,2,2)==((1,),-1.,True)\n"
+        },
+        {
+          "name": "EOS is not expanded; tie and token limit",
+          "code": "\nimport torch\ncalls=[]\ndef score(p):\n calls.append(p)\n return torch.tensor([-100.,0.,0.,0.])\ntokens,s,done={fn}(score,0,3,2,2)\nassert tokens==(1,1) and s==0. and not done\nassert all(p[-1]!=3 for p in calls)\nassert {fn}(lambda p:torch.tensor([-100.,-100.,-100.,0.]),0,3,3,2)==((),0.,True)\n"
+        }
+      ]
+    },
+    {
+      "id": "asr_aed_minimal",
+      "title": "Mini AED Teacher Forcing",
+      "titleZh": "最小 AED 与教师强制",
+      "difficulty": "Hard",
+      "functionName": "asr_aed_minimal",
+      "hint": "AED uses token history and acoustic frames to predict the next token. Teacher forcing shifts the gold sequence into decoder_inputs. In self-attention, hide key positions later than each query before softmax; cross-attention has no frame-causal mask. Scale by sqrt(D), normalize across keys, and exclude padded targets from the mean loss.",
+      "hintZh": "AED 根据历史 token 和声学帧预测下一 token；教师强制将真实序列右移后作为 decoder_inputs。自注意力在 softmax 前遮蔽晚于当前 query 的 key；交叉注意力不对声学帧做因果遮蔽。点积除以 sqrt(D)，沿 key 维归一化，并从平均 loss 中排除填充目标。",
+      "descriptionEn": "Implement asr_aed_minimal(encoder, decoder_inputs, targets, embedding, w_q, w_k, w_v, w_out, pad_id=-1). Shapes: encoder (B,T,D), decoder_inputs and targets (B,U), embedding (V,D), attention weights (D,D), output weight (D,V). Compute causal scaled dot-product self-attention on decoder token embeddings, then cross-attention from decoder states to all encoder frames, then logits (B,U,V). Return (logits, mean_cross_entropy, cross_weights), with cross_weights (B,U,T). Ignore pad_id in the loss. Decoder inputs are BOS followed by the previous ground-truth tokens; T and U are positive and at least one target is unpadded. This omits residual blocks and a learned encoder.",
+      "descriptionZh": "实现 asr_aed_minimal(encoder, decoder_inputs, targets, embedding, w_q, w_k, w_v, w_out, pad_id=-1)。形状依次为：encoder (B,T,D)，解码输入与目标 (B,U)，词嵌入 (V,D)，注意力权重 (D,D)，输出权重 (D,V)。对解码 token 嵌入做因果缩放点积自注意力，再以解码状态查询全部 encoder 帧做交叉注意力，输出 logits (B,U,V)。返回 (logits, 平均交叉熵, cross_weights)，其中权重形状 (B,U,T)；loss 忽略 pad_id。解码输入为 BOS 加前一个真实 token；T、U 均为正且至少有一个非填充目标。此简化模型不含残差块和可训练 encoder。",
+      "tests": [
+        {
+          "name": "Shape, normalization and gradients",
+          "code": "\nimport torch\nB,T,U,D,V=2,3,4,5,7\ne=torch.randn(B,T,D,requires_grad=True); emb=torch.randn(V,D,requires_grad=True)\nw=[torch.randn(D,D,requires_grad=True) for _ in range(3)]; o=torch.randn(D,V,requires_grad=True)\nx=torch.tensor([[0,1,2,3],[0,2,1,0]]); y=torch.tensor([[1,2,3,4],[2,1,0,-1]])\nlogits,loss,a={fn}(e,x,y,emb,*w,o)\nassert logits.shape==(B,U,V) and a.shape==(B,U,T)\nassert torch.allclose(a.sum(-1),torch.ones(B,U),atol=1e-6)\nloss.backward()\nassert all(z.grad is not None and torch.isfinite(z.grad).all() for z in [e,emb,*w,o])\n"
+        },
+        {
+          "name": "Causal tokens and global acoustic attention",
+          "code": "\nimport torch\nD=2; e=torch.tensor([[[1.,0.],[0.,1.]]]); emb=torch.tensor([[1.,0.],[0.,1.],[2.,1.]])\neye=torch.eye(D); out=torch.tensor([[1.,0.,-1.],[0.,1.,-1.]])\nx=torch.tensor([[0,1]]); y=torch.tensor([[1,2]])\na={fn}(e,x,y,emb,eye,eye,eye,out)[0]\nb={fn}(e,torch.tensor([[0,2]]),y,emb,eye,eye,eye,out)[0]\nassert torch.allclose(a[:,0],b[:,0],atol=1e-6)\ne2=e.clone(); e2[:,1]+=5\nc={fn}(e2,x,y,emb,eye,eye,eye,out)[0]\nassert not torch.allclose(a[:,0],c[:,0])\n"
+        },
+        {
+          "name": "Padded target excluded from loss",
+          "code": "\nimport torch,torch.nn.functional as F\ne=torch.randn(1,2,3); emb=torch.randn(5,3); w=torch.eye(3); o=torch.randn(3,5)\nx=torch.tensor([[0,1,2]]); y=torch.tensor([[1,2,-1]])\nlogits,loss,_={fn}(e,x,y,emb,w,w,w,o)\nexpected=F.cross_entropy(logits[:,:2].reshape(-1,5),y[:,:2].reshape(-1))\nassert torch.allclose(loss,expected,atol=1e-6)\n"
+        }
+      ]
+    },
+    {
+      "id": "asr_rnnt_beam",
+      "title": "RNN-T Beam Search",
+      "titleZh": "RNN-T 束搜索",
+      "difficulty": "Hard",
+      "functionName": "asr_rnnt_beam",
+      "hint": "A beam path has both acoustic time t and emitted-token prefix. At a fixed t, token edges create deeper same-frame states; blank edges collect paths for t+1. Sum equal-prefix path masses in log space before pruning. Force a blank edge at the per-frame symbol limit; never collapse repeated tokens as CTC does.",
+      "hintZh": "每条束路径同时有声学时间 t 和已输出 token 前缀。固定 t 时，非 blank 边产生更深的同帧状态，blank 边汇入 t+1。裁剪前先在对数域合并相同前缀的路径概率；达到每帧 token 上限时只能走 blank。重复 token 不像 CTC 那样折叠。",
+      "descriptionEn": "Implement asr_rnnt_beam(score, input_length, beam_size, max_symbols_per_frame, max_output_tokens, blank=0). score(t,prefix_tuple) returns V log probabilities. For each frame, start from the previous frame's prefix beam. At depths 0 through max_symbols_per_frame, each active prefix may emit blank to advance to the next frame; when below both symbol limits, it may emit each nonblank token and remain on the same frame. Merge probability mass of paths reaching the same prefix using logaddexp. Keep beam_size best active prefixes after each nonblank depth and beam_size best blank-completed prefixes after each frame, ranked by descending log probability then lexicographic prefix. Return final ranked `(prefix_tuple, log_probability)` pairs. Positive input_length, beam_size, per-frame and total token limits. This bounded search approximates the full RNN-T search; same-frame repeated tokens are retained.",
+      "descriptionZh": "实现 asr_rnnt_beam(score, input_length, beam_size, max_symbols_per_frame, max_output_tokens, blank=0)。score(t,token 前缀元组) 返回 V 个对数概率。每帧从上一帧的前缀束开始，按深度 0 到 max_symbols_per_frame 扩展：活动前缀可发 blank 推进到下一帧；未达到两个 token 上限时，可发各非 blank token 并留在当前帧。用 logaddexp 合并到达同一前缀的路径概率。每次非 blank 扩展后保留 beam_size 个活动前缀，每帧 blank 汇合后再保留 beam_size 个前缀；均按概率降序、同分按前缀字典序。返回最终排序的 `(前缀元组, 对数概率)` 列表。帧数、束宽及两个 token 上限均为正。此有界搜索近似完整 RNN-T 搜索；同帧重复 token 保留。",
+      "tests": [
+        {
+          "name": "One-frame probabilities including repeated tokens",
+          "code": "\nimport torch,math\ndef score(t,p): return torch.tensor([math.log(.4),math.log(.6)])\ngot=dict({fn}(score,1,4,2,2))\nassert set(got)=={(),(1,),(1,1)}\nassert abs(math.exp(got[()])-.4)<1e-6\nassert abs(math.exp(got[(1,)])-.24)<1e-6\nassert abs(math.exp(got[(1,1)])-.144)<1e-6\n"
+        },
+        {
+          "name": "Two-frame paths merge and tie ranking",
+          "code": "\nimport torch,math\ndef score(t,p): return torch.tensor([math.log(.5),math.log(.5)])\ngot={fn}(score,2,8,1,2)\nscores=dict(got)\nassert abs(math.exp(scores[(1,)])-.25)<1e-6\nassert got==sorted(got,key=lambda x:(-x[1],x[0]))\nassert all(len(p)<=2 for p,s in got)\n"
+        }
+      ]
+    },
+    {
+      "id": "asr_rnnt_minimal",
+      "title": "Mini RNN-T",
+      "titleZh": "最小 RNN-T",
+      "difficulty": "Hard",
+      "functionName": "asr_rnnt_minimal",
+      "hint": "The encoder reads acoustic frames; the prediction network summarizes only previously emitted nonblank tokens; the joint combines both axes. Construct U+1 predictor states by prefix summation, then broadcast encoder and predictor projections into (B,T,U+1,H). Apply log_softmax over V. In the forward lattice, process t then u in increasing order so same-frame token transitions are available; sum paths in log space and negate the terminal log probability.",
+      "hintZh": "Encoder 读取声学帧，Prediction Network 只汇总此前输出的非 blank token，Joint 融合两个维度。通过前缀累加构造 U+1 个预测状态，再把两路投影广播为 (B,T,U+1,H)，沿 V 维做 log_softmax。前向格点按 t、u 递增处理，使同帧 token 转移可继续传播；在对数域合并路径，终点对数概率取负得到 loss。",
+      "descriptionEn": "Implement asr_rnnt_minimal(features, targets, embedding, w_encoder, w_e, w_p, bias, w_out, blank=0). Inputs are features (B,T,F), nonblank target IDs (B,U), embedding (V,Dp), w_encoder (F,De), w_e (De,H), w_p (Dp,H), bias (H), w_out (H,V); T>=1, U>=0. Encoder states are features@w_encoder. Prediction state u is the cumulative sum of embeddings of the first u target tokens, with zero state for u=0. The joint network computes tanh(encoder@w_e + predictor@w_p + bias)@w_out at every (t,u), returning logits (B,T,U+1,V). Return (logits, mean_nll), where mean_nll is the mean negative log probability of all legal RNN-T lattice paths per sample: blank moves (t,u) to (t+1,u), target[u] moves (t,u) to (t,u+1), and no emissions occur at t=T. Use logaddexp; this is a tiny full lattice, not optimized/pruned training.",
+      "descriptionZh": "实现 asr_rnnt_minimal(features, targets, embedding, w_encoder, w_e, w_p, bias, w_out, blank=0)。输入依次是声学特征 (B,T,F)、无 blank 的目标 ID (B,U)、词嵌入 (V,Dp)、w_encoder (F,De)、w_e (De,H)、w_p (Dp,H)、bias (H)、w_out (H,V)；T>=1、U>=0。Encoder 状态为 features@w_encoder；Prediction 状态 u 是前 u 个目标 token 嵌入的累加，u=0 为零状态。Joint 在各 (t,u) 计算 tanh(encoder@w_e + predictor@w_p + bias)@w_out，返回 logits (B,T,U+1,V)。另返回每条样本所有合法 RNN-T 路径负对数概率的批平均：blank 从 (t,u) 到 (t+1,u)，target[u] 从 (t,u) 到 (t,u+1)，t=T 不再发射。用 logaddexp 合并路径。此题是小规模完整格点，不是优化或剪枝训练。",
+      "tests": [
+        {
+          "name": "Uniform one-frame lattice and shape",
+          "code": "\nimport torch,math\nf=torch.tensor([[[1.]]]); y=torch.tensor([[1]])\nemb=torch.zeros(2,1); w=torch.zeros(1,1); b=torch.zeros(1); o=torch.zeros(1,2)\nlogits,loss={fn}(f,y,emb,w,w,w,b,o)\nassert logits.shape==(1,1,2,2) and torch.allclose(logits,torch.zeros_like(logits))\nassert abs(float(loss)-2*math.log(2))<1e-6\n"
+        },
+        {
+          "name": "Empty target, batch and gradients",
+          "code": "\nimport torch,math\nf=torch.randn(2,2,3,requires_grad=True); y=torch.empty(2,0,dtype=torch.long)\nemb=torch.randn(4,5,requires_grad=True); we=torch.randn(3,6,requires_grad=True)\na=torch.randn(6,7,requires_grad=True); p=torch.randn(5,7,requires_grad=True)\nb=torch.randn(7,requires_grad=True); o=torch.randn(7,4,requires_grad=True)\nlogits,loss={fn}(f,y,emb,we,a,p,b,o)\nassert logits.shape==(2,2,1,4) and torch.isfinite(loss)\nloss.backward(); assert all(z.grad is not None and torch.isfinite(z.grad).all() for z in [f,we,a,b,o])\n"
+        }
+      ]
+    },
+    {
+      "id": "asr_rnnt_streaming",
+      "title": "Streaming RNN-T State",
+      "titleZh": "流式 RNN-T 状态缓存",
+      "difficulty": "Hard",
+      "functionName": "asr_rnnt_streaming",
+      "hint": "The encoder cache carries acoustic history; the emitted prefix is the prediction-network state in this toy interface. Process every chunk's frames in order, passing the updated cache to the next frame. For each hidden frame, query the joint scorer repeatedly until blank or the per-frame symbol limit. A token does not advance the frame or reset cache. The total output limit ends the whole stream, including remaining chunks.",
+      "hintZh": "Encoder cache 保存声学历史；本题用已输出前缀代替 Prediction Network 状态。按块、按帧顺序处理，每帧把更新后的 cache 传给下一帧。对同一 hidden 帧反复查询 Joint 评分，直到 blank 或该帧 token 上限；输出 token 不推进帧，也不重置 cache。总输出上限会结束整条流，剩余块不再处理。",
+      "descriptionEn": "Implement asr_rnnt_streaming(chunks, encoder_step, score, max_symbols_per_frame, max_output_tokens, blank=0). chunks is a sequence of (C,F) tensors, possibly including empty chunks. encoder_step(frame, cache) returns (hidden, new_cache), starting with cache=None; it must be called once per frame in order. score(hidden, prefix_tuple) returns V logits. Greedily choose argmax (lowest ID on ties): blank advances to the next encoded frame; nonblank appends a token and stays on this frame. Keep the encoder cache and token prefix across chunk boundaries. Force frame advance after max_symbols_per_frame nonblank emissions on that frame; stop immediately at max_output_tokens total emissions. Return (tokens_tuple, final_cache, truncated_bool), where truncated is true only if total output limit stopped decoding. Both limits are positive. This tests state handling with a caller-supplied causal encoder, not real-time latency.",
+      "descriptionZh": "实现 asr_rnnt_streaming(chunks, encoder_step, score, max_symbols_per_frame, max_output_tokens, blank=0)。chunks 是若干 (C,F) 张量，可含空块。encoder_step(frame, cache) 返回 (hidden, new_cache)，初始 cache=None；应按顺序对每帧调用一次。score(hidden, token 前缀元组) 返回 V 个 logits。贪心取 argmax（同分选最小 ID）：blank 推进到下一编码帧，非 blank 追加 token 并留在本帧。跨块保留 encoder cache 与 token 前缀。每帧输出 max_symbols_per_frame 个非 blank 后强制推进；总输出达到 max_output_tokens 时立即停止。返回 (token 元组, 最终 cache, 是否截断)，仅因总输出上限而停止时截断为真。两个上限均为正。本题用调用方给定的因果 encoder 检验状态维护，不验证真实流式延迟。",
+      "tests": [
+        {
+          "name": "Partition invariance and cross-chunk cache",
+          "code": "\nimport torch\nx=torch.tensor([[1.],[2.],[3.],[4.]])\ndef enc(frame,cache):\n state=frame if cache is None else cache+frame\n return state,state\ndef score(hidden,prefix):\n if int(hidden.item())%2 and (not prefix or prefix[-1]!=1): return torch.tensor([0.,2.])\n return torch.tensor([2.,0.])\na={fn}([x],enc,score,2,10); b={fn}([x[:1],x[1:3],x[3:]],enc,score,2,10)\nassert a[0]==b[0] and torch.equal(a[1],b[1]) and not a[2] and not b[2]\nassert torch.equal(a[1],torch.tensor([10.]))\n"
+        },
+        {
+          "name": "Empty chunks, repeated tokens and global limit",
+          "code": "\nimport torch\ncalls=[]\ndef enc(frame,cache):\n calls.append(float(frame[0])); return frame,frame\ndef score(h,p): return torch.tensor([0.,1.])\nx=torch.tensor([[1.],[2.],[3.]])\ntokens,cache,truncated={fn}([x[:0],x[:1],x[1:]],enc,score,3,2)\nassert tokens==(1,1) and truncated and calls==[1.]\ntokens,cache,truncated={fn}([x[:0]],enc,score,3,2)\nassert tokens==() and cache is None and not truncated\n"
+        },
+        {
+          "name": "Blank advances frames and ties prefer blank",
+          "code": "\nimport torch\nx=torch.ones(3,1)\ndef enc(frame,cache): return frame,(0 if cache is None else cache)+1\nassert {fn}([x[:1],x[1:]],enc,lambda h,p:torch.tensor([1.,1.]),2,5)==((),3,False)\n"
         }
       ]
     }
