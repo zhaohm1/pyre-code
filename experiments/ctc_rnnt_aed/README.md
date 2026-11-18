@@ -7,6 +7,16 @@ node scripts/run-python.js experiments/ctc_rnnt_aed/run.py --exp all
 node scripts/run-python.js experiments/ctc_rnnt_aed/run.py --exp Exp004
 ```
 
+也可以按模型打开可逐格运行的 Notebook：
+
+| Notebook | 对应实验 | 学习重点 |
+| --- | --- | --- |
+| [01_ctc.ipynb](01_ctc.ipynb) | Exp001–003 | 路径折叠、前后向概率、前缀搜索 |
+| [02_aed.ipynb](02_aed.ipynb) | Exp004–006 | 因果与交叉注意力、束搜索、重打分 |
+| [03_rnnt.ipynb](03_rnnt.ipynb) | Exp007–010 | 二维格点、贪心与束搜索、流式缓存 |
+
+每本 Notebook 均可独立从首格运行，代码与 `run.py` 的教学实现相对应。
+
 `--exp` 可选 `Exp001` 至 `Exp010`。每项先运行一个可核对的合成样例，再打印关键结果。代码集中在 [run.py](run.py)，便于沿着十项实验阅读。所有张量均为合成输入；数值只验证算法与实现，不代表真实语音识别质量、训练效率或流式延迟。
 
 | 实验 | 平台题目 ID | 核心代码及原理 | 样例检查 |
